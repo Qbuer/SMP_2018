@@ -1,11 +1,16 @@
 import json
+import logging
 import numpy as np
 import os
 from pyltp import Segmentor
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+lobging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 """
 SMP 分类工具类
 """
+
 
 class Data(object):
     """Load and parse the json data file
@@ -59,7 +64,23 @@ class Data(object):
     
     def minibatches(self, batch_size, shuffle):
         return self.get_batch(batch_size, shuffle)
-   
+
+def load_embedding(input_file=None):
+    assert input_file is not None
+    with open(input_file, encoding='utf-8', errors='ignore') as f:
+        metadata = next(f).strip()
+        word_sum, dim = metadata.split(' ')
+        embedding = np.array(np.random.randn(int(word_sum), int(dim), dtype=np.float32))
+        token2id = {}
+        count = 0 
+        for line in f:
+            items = line.strip().split(' ')
+            token2id[items[0]] = count
+            embedding[count] = np.array(items[1:])
+            count += 1
+        logging.info("Initialized embedding.")
+        return embedding, token2id
+
 def test1():
     data = Data('./data/train.json', 'L:\\workspace\\ltp_data\\')
     data.load_data()
@@ -68,4 +89,5 @@ def test1():
         print(item)
 
 if __name__ == '__main__':
-    test1()
+    embedding, token2id = load_embedding('./data/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5')
+    pass
