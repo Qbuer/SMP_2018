@@ -65,7 +65,7 @@ class Data(object):
     def minibatches(self, batch_size, shuffle):
         return self.get_batch(batch_size, shuffle)
 
-def load_embedding(input_file=None):
+def load_embedding(input_file='./data/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5'):
     assert input_file is not None
     with open(input_file, encoding='utf-8', errors='ignore') as f:
         metadata = next(f).strip()
@@ -89,5 +89,5 @@ def test1():
         print(item)
 
 if __name__ == '__main__':
-    embedding, token2id = load_embedding('./data/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5')
+    embedding, token2id = load_embedding()
     pass
