@@ -27,7 +27,7 @@ class Config(object):
     max_length = -1
     
     dropout = 0.5
-    
+    hidden_size = 128
     batch_size = 32
     n_epochs = 50
     lr = 0.001
@@ -36,39 +36,17 @@ class Classifier(object):
     """分类器
     
     Attributes:
-        learning_rate
-        trainning_steps
-        display_step
+        
     """
-    
-    # def __init__(self, num_input=None, timesteps=None, num_hidden=128, num_classes=None,
-    #              batch_size=64, learning_rate=0.0001, trainning_steps=10000, display_step=200,
-    #              _input=None):
-    #     """设置分类器学习速率"""
-    #     self.learning_rate = learning_rate
-    #     self.trainning_steps = trainning_steps
-    #     self.display_step = display_step
-        
-    #     assert num_input is not None
-    #     assert timesteps is not None
-    #     assert num_classes is not None
-    #     assert _input is not None
-        
-    #     self.num_input = num_input
-    #     self.timesteps = timesteps
-    #     self.num_hidden = num_hidden
-    #     self.num_classes = num_classes
-        
-    #     self.batch_size = batch_size
-    #     self.input = _input
+
         
     def add_placeholders(self):
         """Some docs..."""
         max_length = self.config.max_length
         self.input_placeholder = tf.placeholder(
-            tf.int32, shape=[None, max_length, self.config.n_features])
+            tf.int32, shape=[None, max_length, self.config.n_word_features])
         self.labels_placeholder = tf.placeholder(
-            tf.int32, shape=[None, self.config.n_classes])
+            tf.int32, shape=[None])
         self.mask_placehoder = tf.placeholder(
             tf.bool, shape=[None, max_length])
         self.dropout_placehoder = tf.placeholder(tf.float32, shape=[])
@@ -86,17 +64,17 @@ class Classifier(object):
 
     def add_embedding(self):
         embeddings = tf.nn.embedding_lookup(self.pretrained_embeddings, self.input_placeholder)
-        embeddings = tf.reshpae(
+        embeddings = tf.reshape(
             embeddings, 
-            (-1, self.max_length, self.config.n_word_embed_size * self.config.n_word_features))
+            (-1, self.config.max_length, self.config.n_word_embed_size * self.config.n_word_features))
         return embeddings
     
     def add_prediction_op(self):
         x = self.add_embedding()
         dropout_rate = self.dropout_placehoder
 
-        lstm_cell = tf.nn.rnn_cell.BasicRNNCell(self.config.hidden_size)
-        initial_state = rnn_cell.zero_state(self.batch_size, dypte=tf.float32)
+        lstm_cell = tf.nn.rnn_cell.LSTMCell(self.config.hidden_size)
+        initial_state = lstm_cell.zero_state(self.config.batch_size, dtype=tf.float32)
         outputs, state = tf.nn.dynamic_rnn(lstm_cell, x, initial_state=initial_state)
         U = tf.get_variable(
             "U",
@@ -107,7 +85,7 @@ class Classifier(object):
             shape=[self.config.n_classes],
             initializer=tf.constant_initializer(0.))
         
-        preds = tf.matmul(outputs, U) + b2
+        preds = tf.matmul(state.h, U) + b2
         return preds
         
     def add_loss_op(self, preds):
@@ -122,7 +100,7 @@ class Classifier(object):
         train_op = tf.train.AdamOptimizer(self.config.lr).minimize(loss)
         return train_op
     
-    def train_on_batch(elf, sess, inputs_batch, labels_batch, mask_batch):
+    def train_on_batch(self, sess, inputs_batch, labels_batch):
         feed = self.create_feed_dict(
             inputs_batch, labels_batch=labels_batch, dropout=self.config.dropout)
         _, loss = sess.run([self.train_op, self.loss], feed_dict=feed)
@@ -133,19 +111,19 @@ class Classifier(object):
 
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
-            batch = getbatch()
+            batch = train_data.minibatches(self.config.batch_size, shuffle=True)
             for x in batch: 
                 loss = self.train_on_batch(sess, x)
             logger.info("training finished")
             
             logger.info("Evaluating on development data")
-            token_cm, entity_scores = self.evaluate(sess, dev_set, dev_set_raw)
-            score = entity_scores[-1]
+            # token_cm, entity_scores = self.evaluate(sess, dev_set, dev_set_raw)
+            # score = entity_scores[-1]
             
-            if score > best_score:
-                best_score = score
-                logger.info("New best score! Saving model in %s", self.config.model_output)
-                saver.save(sess, self.config.model_output)
+            # if score > best_score:
+            #     best_score = score
+            #     logger.info("New best score! Saving model in %s", self.config.model_output)
+            #     saver.save(sess, self.config.model_output)
 
     def build(self):
         """Some docs"""
@@ -162,15 +140,22 @@ class Classifier(object):
         self.mask_placehoder = None
         self.dropout_placehoder = None
         self.config = config
+        
+        self.build()
 
 
 def do_train():
-    pretrained_embeddings = util.load_embedding()
+    pretrained_embeddings, _ = util.load_embedding(cache='cache')
     train_data = util.Data('./data/train.json', 'L:\\workspace\\ltp_data\\')
     dev_data = util.Data('./data/dev.json', 'L:\\workspace\\ltp_data\\')
     config = Config()
+    # 配置参数. 测试集如何设置?
+    config.max_length = len(train_data.segment_data)
+    config.n_classes = len(set(train_data.labels))
+    config.n_word_embed_size = len(pretrained_embeddings[0])
+
     
-    
+
 
     with tf.Graph().as_default():
         logger.info("Building model...",)
@@ -181,8 +166,9 @@ def do_train():
         saver = tf.train.Saver()
 
         with tf.Session() as session:
+            
             session.run(init)
-            # model.fit(session, saver, train_data )
+            model.fit(session, saver, train_data, dev_data)
 
 
 if __name__ == '__main__':

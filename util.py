@@ -2,11 +2,13 @@ import json
 import logging
 import numpy as np
 import os
+import pickle
 from pyltp import Segmentor
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-lobging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 """
 SMP 分类工具类
 """
@@ -28,8 +30,10 @@ class Data(object):
         self.segmentor.load(os.path.join(ltp_data_path, 'cws.model'))
         self.labels = []
         self.segment_data = []
+
+        self.load_data()
        
-    def destory():
+    def destory(self):
         self.segmentor.release()
         
     def get_metadata(self):
@@ -60,25 +64,43 @@ class Data(object):
             np.random.shuffle(indices)
         for batch_start in np.arange(0, data_size, batch_size):
             minibatch_indices = indices[batch_start:batch_start + batch_size]
-            yield [self.segment_data[i] for i in minibatch_indices]
+            yield [(self.segment_data[i], self.labels[i]) for i in minibatch_indices]
     
-    def minibatches(self, batch_size, shuffle):
+    def minibatches(self, batch_size, shuffle=True):
         return self.get_batch(batch_size, shuffle)
 
-def load_embedding(input_file='./data/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5'):
+    def all_data(self, shuffle=True):
+        """Get all data"""
+        data_size = len(self.segment_data)
+        indices = np.arrange(data_size)
+        if shuffle:
+            np.random.shuffle(indices)
+        return [self.segment_data[i] for i in indices]
+
+def load_embedding(input_file='./data/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5', cache=None):
     assert input_file is not None
+    if cache is not None:
+        with open(cache, 'rb') as f:
+            embedding = pickle.load(f)
+            token2id = pickle.load(f)
+        return embedding, token2id
     with open(input_file, encoding='utf-8', errors='ignore') as f:
         metadata = next(f).strip()
         word_sum, dim = metadata.split(' ')
-        embedding = np.array(np.random.randn(int(word_sum), int(dim), dtype=np.float32))
+        embedding = np.array(np.random.randn(int(word_sum) + 1, int(dim)), dtype=np.float32)
         token2id = {}
-        count = 0 
+        count = 1
+        
         for line in f:
             items = line.strip().split(' ')
             token2id[items[0]] = count
             embedding[count] = np.array(items[1:])
             count += 1
         logging.info("Initialized embedding.")
+        if cache is not None:
+            with open("cache", 'wb') as f:
+                pickle.dump(embedding, f)
+                pickle.dump(token2id, f)
         return embedding, token2id
 
 def test1():
@@ -89,5 +111,6 @@ def test1():
         print(item)
 
 if __name__ == '__main__':
-    embedding, token2id = load_embedding()
-    pass
+    embedding, token2id = load_embedding(cache='cache')
+    
+
