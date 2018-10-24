@@ -203,8 +203,8 @@ def do_train(args):
         logger.info("took %.2f seconds", time.time() - start)
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()
-
-        with tf.Session() as session:
+        gpu_options = tf.GPUOptions(allow_growth=True)
+        with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as session:
             
             session.run(init)
             model.fit(session, saver, train_data, dev_data)
