@@ -29,9 +29,11 @@ class Data(object):
           'flight', 'translation', 'train', 'schedule', 'radio', 'email']
 
 
-    def __init__(self, data_file=None, ltp_data_path=None):
+    def __init__(self, data_file=None, ltp_data_path=None, max_length=None):
         assert ltp_data_path is not None
         assert data_file is not None
+ 
+        self.max_length = max_length
         self.data_file = data_file
         self.segmentor = Segmentor()
         self.segmentor.load(os.path.join(ltp_data_path, 'cws.model'))
@@ -47,9 +49,7 @@ class Data(object):
         
     def get_metadata(self):
         """数据集的大小信息"""
-        data_size = len(self.data)
-        data_max_length = max([len(x[0]) for x in self.data])
-        return data_size, data_max_length
+        return len(self.data), self.max_length
     
     def load_data(self):
         """load and parse the data"""
@@ -62,8 +62,14 @@ class Data(object):
         for key in json_data.keys():
             label = json_data.get(key).get('label')
             query = json_data.get(key).get('query')
-            words = list(self.segmentor.segment(query))
+            if self.max_length is not None:
+                words = list(self.segmentor.segment(query))[:self.max_length]
+            else:
+                words = list(self.segmentor.segment(query))
             self.data.append((words, self.LABELS.index(label)))
+        
+        if self.max_length is None:
+            self.max_length = max([len(x[0]) for x in self.data])
     
     def pad_data(self):
         max_length = max([len(x[0]) for x in self.data])

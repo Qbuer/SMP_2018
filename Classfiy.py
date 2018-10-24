@@ -8,8 +8,8 @@ from tensorflow.contrib import rnn
 import logging
 import util
 import time
-
-
+import sys
+import argparse
 import numpy as np
 import json
 import pickle
@@ -116,9 +116,32 @@ class Classifier(object):
         _, loss = sess.run([self.train_op, self.loss], feed_dict=feed)
         return loss
 
-    def fit(self, sess, saver, train_data_raw, dev_data):
+    def predict_on_batch(self, sess, inputs_batch):
+        feed = self.create_feed_dict(
+            inputs_batch, dropout=self.config.dropout)
+        predictions = sess.run(tf.argmax(self.pred, axis=1), feed_dict=feed)
+        return predictions
+
+    def evaluate(self, sess, dev_data):
+        correct_preds, total_correct, total_preds = 0., 0., 0.
+        batch = util.minibatches(dev_data, self.config.batch_size)
+        preds = []
+        labels = []
+        for x in batch:
+            # tmp = self.predict_on_batch(sess, x[0])
+            preds += list(self.predict_on_batch(sess, x[0]))
+            labels += list(x[1])
+        total_preds = len(preds)
+        for pred, label in zip(preds, labels):
+            if pred == label:
+                correct_preds += 1
+        
+        return correct_preds / total_preds
+
+    def fit(self, sess, saver, train_data_raw, dev_data_raw):
         best_score = 0.
         train_data = preprocess_data(train_data_raw.padding_data, self.token2id)
+        dev_data = preprocess_data(dev_data_raw.padding_data, self.token2id)
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
             batch = util.minibatches(train_data, self.config.batch_size, shuffle=True)
@@ -127,6 +150,11 @@ class Classifier(object):
             logger.info("training finished")
             
             logger.info("Evaluating on development data")
+            
+            print(self.evaluate(sess, dev_data))
+            # batch = util.minibatches(dev_data, self.config.batch_size, shuffle=False)
+            # for x in batch: 
+            #     loss = self.predict_on_batch(sess, *x)
             # token_cm, entity_scores = self.evaluate(sess, dev_set, dev_set_raw)
             # score = entity_scores[-1]
             
@@ -155,10 +183,10 @@ class Classifier(object):
         self.build()
 
 
-def do_train():
-    pretrained_embeddings, token2id = util.load_word_embedding(input_file='embeding_terse', cache='cache')
-    train_data = util.Data('./data/train.json', 'L:\\workspace\\ltp_data\\')
-    dev_data = util.Data('./data/dev.json', 'L:\\workspace\\ltp_data\\')
+def do_train(args):
+    pretrained_embeddings, token2id = util.load_word_embedding(input_file=args.vectors, cache='cache')
+    train_data = util.Data(args.data_train, args.ltp_data)
+    dev_data = util.Data(args.data_dev, args.ltp_data, max_length=train_data.max_length)
     config = Config()
     # 配置参数. 测试集如何设置?
     _, config.max_length = train_data.get_metadata()
@@ -183,6 +211,20 @@ def do_train():
 
 
 if __name__ == '__main__':
-    do_train()
+    parser = argparse.ArgumentParser(description='SMP2018 -- Text Classification')
+    subparsers = parser.add_subparsers()
+    command_parser = subparsers.add_parser('train', help='')
+    command_parser.add_argument('-dt', '--data-train', default="data/train.json", help="Training data")
+    command_parser.add_argument('-dd', '--data-dev',  default="data/dev.json", help="Dev data")
+    command_parser.add_argument('-vv', '--vectors',  default="embeding_terse", help="Path to word vectors file")
+    command_parser.add_argument('-ltp', '--ltp-data',  help="Path to ltp_data")
+    command_parser.set_defaults(func=do_train)
+    ARGS = parser.parse_args()
+    
+    if ARGS.func is None:
+        parser.print_help()
+        sys.exit(1)
+    else:
+        ARGS.func(ARGS)
     
 

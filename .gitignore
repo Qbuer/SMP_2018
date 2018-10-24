@@ -2,3 +2,4 @@
 cache
 embeding_terse
 __pycache__/
+.vscode/
