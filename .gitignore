@@ -1,2 +1,4 @@
 *.iter5
 cache
+embeding_terse
+__pycache__/

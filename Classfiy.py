@@ -36,7 +36,7 @@ class Config(object):
 def preprocess_data(data, token2id):
     ret = []
     for sentence, label in data:
-        token_sentence = [token2id[x] for x in sentence]
+        token_sentence = np.array([token2id[x] if token2id.get(x) else 0 for x in sentence])
         ret.append((token_sentence, label))
     return ret
     
@@ -52,9 +52,9 @@ class Classifier(object):
         """Some docs..."""
         max_length = self.config.max_length
         self.input_placeholder = tf.placeholder(
-            tf.int32, shape=[None, None, self.config.n_word_features])
+            tf.int32, shape=[None, max_length])
         self.labels_placeholder = tf.placeholder(
-            tf.int32, shape=[None])
+            tf.int32, shape=[None, ])
         self.mask_placehoder = tf.placeholder(
             tf.bool, shape=[None, max_length])
         self.dropout_placehoder = tf.placeholder(tf.float32, shape=[])
@@ -74,29 +74,31 @@ class Classifier(object):
         embeddings = tf.nn.embedding_lookup(self.pretrained_embeddings, self.input_placeholder)
         embeddings = tf.reshape(
             embeddings, 
-            (-1, self.config.max_length, self.config.n_word_embed_size * self.config.n_word_features))
+            (-1, self.config.max_length * self.config.n_word_embed_size * self.config.n_word_features))
         return embeddings
     
     def add_prediction_op(self):
         x = self.add_embedding()
         dropout_rate = self.dropout_placehoder
 
-        lstm_cell = tf.nn.rnn_cell.LSTMCell(self.config.hidden_size)
-        initial_state = lstm_cell.zero_state(self.config.batch_size, dtype=tf.float32)
-        outputs, state = tf.nn.dynamic_rnn(lstm_cell, x, initial_state=initial_state)
+        # lstm_cell = tf.nn.rnn_cell.LSTMCell(self.config.hidden_size)
+        # initial_state = lstm_cell.zero_state(self.config.batch_size, dtype=tf.float32)
+        # outputs, state = tf.nn.dynamic_rnn(lstm_cell, x, initial_state=initial_state)
         U = tf.get_variable(
             "U",
-            shape=[self.config.hidden_size, self.config.n_classes],
+            shape=[self.config.max_length * self.config.n_word_embed_size, self.config.n_classes],
             initializer=tf.contrib.layers.xavier_initializer())
         b2 = tf.get_variable(
             "b2",
             shape=[self.config.n_classes],
             initializer=tf.constant_initializer(0.))
         
-        preds = tf.matmul(state.h, U) + b2
+        # preds = tf.matmul(state.h, U) + b2
+        preds = tf.matmul(x , U)
         return preds
         
     def add_loss_op(self, preds):
+        
         loss = tf.reduce_mean(
             tf.nn.sparse_softmax_cross_entropy_with_logits(
                 labels=self.labels_placeholder,
@@ -116,7 +118,7 @@ class Classifier(object):
 
     def fit(self, sess, saver, train_data_raw, dev_data):
         best_score = 0.
-        train_data = preprocess_data(train_data_raw)
+        train_data = preprocess_data(train_data_raw.padding_data, self.token2id)
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
             batch = util.minibatches(train_data, self.config.batch_size, shuffle=True)
@@ -140,9 +142,10 @@ class Classifier(object):
         self.loss = self.add_loss_op(self.pred)
         self.train_op = self.add_training_op(self.loss)
 
-    def __init__(self, pretrained_embeddings, config):
+    def __init__(self, pretrained_embeddings, token2id, config):
         """Some docs"""
         self.pretrained_embeddings = pretrained_embeddings
+        self.token2id = token2id
         self.input_placeholder = None
         self.labels_placeholder = None
         self.mask_placehoder = None
@@ -153,7 +156,7 @@ class Classifier(object):
 
 
 def do_train():
-    pretrained_embeddings, _ = util.load_word_embedding(cache='cache')
+    pretrained_embeddings, token2id = util.load_word_embedding(input_file='embeding_terse', cache='cache')
     train_data = util.Data('./data/train.json', 'L:\\workspace\\ltp_data\\')
     dev_data = util.Data('./data/dev.json', 'L:\\workspace\\ltp_data\\')
     config = Config()
@@ -168,7 +171,7 @@ def do_train():
     with tf.Graph().as_default():
         logger.info("Building model...",)
         start = time.time()
-        model = Classifier(pretrained_embeddings, config)
+        model = Classifier(pretrained_embeddings, token2id, config)
         logger.info("took %.2f seconds", time.time() - start)
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()

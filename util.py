@@ -123,7 +123,7 @@ def minibatches(data, batch_size, shuffle=True):
 
 def load_word_embedding(input_file='./data/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5', cache=None):
     assert input_file is not None
-    if cache is not None:
+    if cache is not None and os.path.exists(cache):
         with open(cache, 'rb') as f:
             embedding = pickle.load(f)
             token2id = pickle.load(f)
@@ -147,6 +147,18 @@ def load_word_embedding(input_file='./data/sgns.target.word-word.dynwin5.thr10.n
                 pickle.dump(token2id, f)
         return embedding, token2id
 
+def embedding_simplify(embedding, token2id, data):
+    """保留需用到的词向量, 全部太大了"""
+    new_embedding = []
+    for item in data:
+        for word in item[0]:
+            index = token2id.get(word)
+            if index is not None:
+                new_embedding.append((word, embedding[index]))
+    with open('embeding_terse', 'w', encoding='utf-8') as f:
+        f.write("%d %d\n" % (len(new_embedding), 300))
+        for item in new_embedding:
+            f.write("%s %s\n" % (item[0], " ".join([str(x) for x in item[1]])))
 
 
 def test1():
@@ -159,6 +171,10 @@ def test1():
         
 
 if __name__ == '__main__':
-    # embedding, token2id = load_word_embedding(cache='cache')
-    test1()
+    train_data = Data('./data/train.json', 'L:\\workspace\\ltp_data\\')
+    
+    data = train_data.data
+    embedding, token2id = load_word_embedding(cache='cache')
+    embedding_simplify(embedding, token2id, data)
+    
 
