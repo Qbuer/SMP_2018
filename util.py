@@ -22,24 +22,33 @@ class Data(object):
         labels: 标签列表
     """
     
+    LABELS = ['website', 'tvchannel', 'lottery', 'chat', 'match',
+          'datetime', 'weather', 'bus', 'novel', 'video', 'riddle',
+          'calc', 'telephone', 'health', 'contacts', 'epg', 'app', 'music',
+          'cookbook', 'stock', 'map', 'message', 'poetry', 'cinemas', 'news',
+          'flight', 'translation', 'train', 'schedule', 'radio', 'email']
+
+
     def __init__(self, data_file=None, ltp_data_path=None):
         assert ltp_data_path is not None
         assert data_file is not None
         self.data_file = data_file
         self.segmentor = Segmentor()
         self.segmentor.load(os.path.join(ltp_data_path, 'cws.model'))
-        self.labels = []
-        self.segment_data = []
+        
+        self.data = []
+        self.padding_data = []
 
         self.load_data()
-       
+        self.pad_data()
+
     def destory(self):
         self.segmentor.release()
         
     def get_metadata(self):
         """数据集的大小信息"""
         data_size = len(self.data)
-        data_max_length = max([len(x) for x in self.data])
+        data_max_length = max([len(x[0]) for x in self.data])
         return data_size, data_max_length
     
     def load_data(self):
@@ -49,35 +58,70 @@ class Data(object):
             
         label_count = 0
         char_count = 0
+        
         for key in json_data.keys():
             label = json_data.get(key).get('label')
             query = json_data.get(key).get('query')
             words = list(self.segmentor.segment(query))
-            self.segment_data.append(words)
-            self.labels.append(label)
-            
-    def get_batch(self, batch_size, shuffle=True):
-        """Get a batch of the data"""
-        data_size = len(self.segment_data)
-        indices = np.arange(data_size)
-        if shuffle:
-            np.random.shuffle(indices)
-        for batch_start in np.arange(0, data_size, batch_size):
-            minibatch_indices = indices[batch_start:batch_start + batch_size]
-            yield [(self.segment_data[i], self.labels[i]) for i in minibatch_indices]
+            self.data.append((words, self.LABELS.index(label)))
     
-    def minibatches(self, batch_size, shuffle=True):
-        return self.get_batch(batch_size, shuffle)
+    def pad_data(self):
+        max_length = max([len(x[0]) for x in self.data])
+        padding = [0] 
+        for sentence, label in self.data:
+            new_sentence = sentence[:max_length] if len(sentence) >= max_length else sentence + padding * (max_length - len(sentence))
+            self.padding_data.append((np.array(new_sentence), label))
+            
+    
+            
 
-    def all_data(self, shuffle=True):
-        """Get all data"""
-        data_size = len(self.segment_data)
-        indices = np.arrange(data_size)
-        if shuffle:
-            np.random.shuffle(indices)
-        return [self.segment_data[i] for i in indices]
+def get_minibatches(data, minibatch_size, shuffle=True):
+    """
+    Iterates through the provided data one minibatch at at time. You can use this function to
+    iterate through data in minibatches as follows:
 
-def load_embedding(input_file='./data/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5', cache=None):
+        for inputs_minibatch in get_minibatches(inputs, minibatch_size):
+            ...
+
+    Or with multiple data sources:
+
+        for inputs_minibatch, labels_minibatch in get_minibatches([inputs, labels], minibatch_size):
+            ...
+
+    Args:
+        data: there are two possible values:
+            - a list or numpy array
+            - a list where each element is either a list or numpy array
+        minibatch_size: the maximum number of items in a minibatch
+        shuffle: whether to randomize the order of returned data
+    Returns:
+        minibatches: the return value depends on data:
+            - If data is a list/array it yields the next minibatch of data.
+            - If data a list of lists/arrays it returns the next minibatch of each element in the
+              list. This can be used to iterate through multiple data sources
+              (e.g., features and labels) at the same time.
+
+    """
+    list_data = type(data) is list and (type(data[0]) is list or type(data[0]) is np.ndarray)
+    data_size = len(data[0]) if list_data else len(data)
+    indices = np.arange(data_size)
+    if shuffle:
+        np.random.shuffle(indices)
+    for minibatch_start in np.arange(0, data_size, minibatch_size):
+        minibatch_indices = indices[minibatch_start:minibatch_start + minibatch_size]
+        yield [minibatch(d, minibatch_indices) for d in data] if list_data \
+            else minibatch(data, minibatch_indices)
+
+
+def minibatch(data, minibatch_idx):
+    return data[minibatch_idx] if type(data) is np.ndarray else [data[i] for i in minibatch_idx]
+
+def minibatches(data, batch_size, shuffle=True):
+    batches = [np.array(col) for col in zip(*data)]
+    return get_minibatches(batches, batch_size, shuffle)
+
+
+def load_word_embedding(input_file='./data/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5', cache=None):
     assert input_file is not None
     if cache is not None:
         with open(cache, 'rb') as f:
@@ -103,14 +147,18 @@ def load_embedding(input_file='./data/sgns.target.word-word.dynwin5.thr10.neg5.d
                 pickle.dump(token2id, f)
         return embedding, token2id
 
+
+
 def test1():
-    data = Data('./data/train.json', 'L:\\workspace\\ltp_data\\')
-    data.load_data()
-    data = data.get_batch(10)
-    for item in data:
-        print(item)
+    train_data = Data('./data/train.json', 'L:\\workspace\\ltp_data\\')
+    
+    data = train_data.padding_data
+    batch = minibatches(data, 12)
+    for x in batch: 
+        print(x)
+        
 
 if __name__ == '__main__':
-    embedding, token2id = load_embedding(cache='cache')
-    
+    # embedding, token2id = load_word_embedding(cache='cache')
+    test1()
 

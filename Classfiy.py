@@ -32,6 +32,9 @@ class Config(object):
     n_epochs = 50
     lr = 0.001
     pass
+
+def prepocess_data(data, embedding, ):
+    pass
 class Classifier(object):
     """分类器
     
@@ -111,9 +114,9 @@ class Classifier(object):
 
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
-            batch = train_data.minibatches(self.config.batch_size, shuffle=True)
+            batch = util.minibatches(train_data.padding_data, self.config.batch_size, shuffle=True)
             for x in batch: 
-                loss = self.train_on_batch(sess, x)
+                loss = self.train_on_batch(sess, *x)
             logger.info("training finished")
             
             logger.info("Evaluating on development data")
@@ -145,13 +148,13 @@ class Classifier(object):
 
 
 def do_train():
-    pretrained_embeddings, _ = util.load_embedding(cache='cache')
+    pretrained_embeddings, _ = util.load_word_embedding(cache='cache')
     train_data = util.Data('./data/train.json', 'L:\\workspace\\ltp_data\\')
     dev_data = util.Data('./data/dev.json', 'L:\\workspace\\ltp_data\\')
     config = Config()
     # 配置参数. 测试集如何设置?
-    config.max_length = len(train_data.segment_data)
-    config.n_classes = len(set(train_data.labels))
+    _, config.max_length = train_data.get_metadata()
+    config.n_classes = len(train_data.LABELS)
     config.n_word_embed_size = len(pretrained_embeddings[0])
 
     
