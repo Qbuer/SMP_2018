@@ -33,8 +33,13 @@ class Config(object):
     lr = 0.001
     pass
 
-def prepocess_data(data, embedding, ):
-    pass
+def preprocess_data(data, token2id):
+    ret = []
+    for sentence, label in data:
+        token_sentence = [token2id[x] for x in sentence]
+        ret.append((token_sentence, label))
+    return ret
+    
 class Classifier(object):
     """分类器
     
@@ -47,7 +52,7 @@ class Classifier(object):
         """Some docs..."""
         max_length = self.config.max_length
         self.input_placeholder = tf.placeholder(
-            tf.int32, shape=[None, max_length, self.config.n_word_features])
+            tf.int32, shape=[None, None, self.config.n_word_features])
         self.labels_placeholder = tf.placeholder(
             tf.int32, shape=[None])
         self.mask_placehoder = tf.placeholder(
@@ -109,12 +114,12 @@ class Classifier(object):
         _, loss = sess.run([self.train_op, self.loss], feed_dict=feed)
         return loss
 
-    def fit(self, sess, saver, train_data, dev_data):
+    def fit(self, sess, saver, train_data_raw, dev_data):
         best_score = 0.
-
+        train_data = preprocess_data(train_data_raw)
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
-            batch = util.minibatches(train_data.padding_data, self.config.batch_size, shuffle=True)
+            batch = util.minibatches(train_data, self.config.batch_size, shuffle=True)
             for x in batch: 
                 loss = self.train_on_batch(sess, *x)
             logger.info("training finished")
