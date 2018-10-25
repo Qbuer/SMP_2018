@@ -129,12 +129,13 @@ class Classifier(object):
         labels = []
         for x in batch:
             # tmp = self.predict_on_batch(sess, x[0])
-            preds += list(self.predict_on_batch(sess, x[0]))
-            labels += list(x[1])
+            preds = list(self.predict_on_batch(sess, x[0]))
+            labels = list(x[1])
+            for pred, label in zip(preds, labels):
+                if pred == label:
+                    correct_preds += 1
         total_preds = len(preds)
-        for pred, label in zip(preds, labels):
-            if pred == label:
-                correct_preds += 1
+        
         
         return correct_preds / total_preds
 

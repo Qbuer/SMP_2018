@@ -13,6 +13,8 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 SMP 分类工具类
 """
 
+class LTP(object):
+    stati
 
 class Data(object):
     """Load and parse the json data file
