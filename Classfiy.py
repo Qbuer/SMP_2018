@@ -119,21 +119,23 @@ class Classifier(object):
     def predict_on_batch(self, sess, inputs_batch):
         feed = self.create_feed_dict(
             inputs_batch, dropout=self.config.dropout)
-        predictions = sess.run(tf.argmax(self.pred, axis=1), feed_dict=feed)
+        predictions = np.argmax(sess.run(self.pred, feed_dict=feed), axis=1)
         return predictions
 
     def evaluate(self, sess, dev_data):
         correct_preds, total_correct, total_preds = 0., 0., 0.
-        batch = util.minibatches(dev_data, self.config.batch_size)
+        batch = util.minibatches(dev_data, self.config.batch_size, shuffle=False)
         preds = []
         labels = []
         for x in batch:
-            # tmp = self.predict_on_batch(sess, x[0])
-            preds = list(self.predict_on_batch(sess, x[0]))
-            labels = list(x[1])
-            for pred, label in zip(preds, labels):
-                if pred == label:
-                    correct_preds += 1
+            tmp = self.predict_on_batch(sess, x[0])
+            preds += list(tmp)
+            labels += list(x[1])
+            
+        
+        for pred, label in zip(preds, labels):
+            if pred == label:
+                correct_preds += 1
         total_preds = len(preds)
         
         
@@ -185,6 +187,7 @@ class Classifier(object):
 
 
 def do_train(args):
+
     pretrained_embeddings, token2id = util.load_word_embedding(input_file=args.vectors, cache='cache')
     train_data = util.Data(args.data_train, args.ltp_data)
     dev_data = util.Data(args.data_dev, args.ltp_data, max_length=train_data.max_length)
@@ -218,7 +221,7 @@ if __name__ == '__main__':
     command_parser.add_argument('-dt', '--data-train', default="data/train.json", help="Training data")
     command_parser.add_argument('-dd', '--data-dev',  default="data/dev.json", help="Dev data")
     command_parser.add_argument('-vv', '--vectors',  default="embeding_terse", help="Path to word vectors file")
-    command_parser.add_argument('-ltp', '--ltp-data',  help="Path to ltp_data")
+    command_parser.add_argument('-ltp', '--ltp-data', default="L:/workspace/ltp_data/", help="Path to ltp_data")
     command_parser.set_defaults(func=do_train)
     ARGS = parser.parse_args()
     
