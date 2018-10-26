@@ -27,7 +27,7 @@ class Config(object):
     max_length = -1
     
     dropout = 0.5
-    hidden_size = 128
+    hidden_size = 300
     batch_size = 32
     n_epochs = 50
     lr = 0.001
@@ -74,27 +74,27 @@ class Classifier(object):
         embeddings = tf.nn.embedding_lookup(self.pretrained_embeddings, self.input_placeholder)
         embeddings = tf.reshape(
             embeddings, 
-            (-1, self.config.max_length * self.config.n_word_embed_size * self.config.n_word_features))
+            (-1, self.config.max_length, self.config.n_word_embed_size * self.config.n_word_features))
         return embeddings
     
     def add_prediction_op(self):
         x = self.add_embedding()
         dropout_rate = self.dropout_placehoder
 
-        # lstm_cell = tf.nn.rnn_cell.LSTMCell(self.config.hidden_size)
-        # initial_state = lstm_cell.zero_state(self.config.batch_size, dtype=tf.float32)
-        # outputs, state = tf.nn.dynamic_rnn(lstm_cell, x, initial_state=initial_state)
+        lstm_cell = tf.nn.rnn_cell.LSTMCell(self.config.hidden_size)
+        initial_state = lstm_cell.zero_state(self.config.batch_size, dtype=tf.float32)
+        outputs, state = tf.nn.dynamic_rnn(lstm_cell, x, initial_state=initial_state)
         U = tf.get_variable(
             "U",
-            shape=[self.config.max_length * self.config.n_word_embed_size, self.config.n_classes],
+            shape=[self.config.hidden_size, self.config.n_classes],
             initializer=tf.contrib.layers.xavier_initializer())
         b2 = tf.get_variable(
             "b2",
             shape=[self.config.n_classes],
             initializer=tf.constant_initializer(0.))
         
-        # preds = tf.matmul(state.h, U) + b2
-        preds = tf.matmul(x , U)
+        preds = tf.matmul(state.h, U) + b2
+        # preds = tf.matmul(x , U)
         return preds
         
     def add_loss_op(self, preds):
@@ -128,6 +128,8 @@ class Classifier(object):
         preds = []
         labels = []
         for x in batch:
+            if len(x[0]) < self.config.batch_size:
+                continue
             tmp = self.predict_on_batch(sess, x[0])
             preds += list(tmp)
             labels += list(x[1])
@@ -149,6 +151,9 @@ class Classifier(object):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
             batch = util.minibatches(train_data, self.config.batch_size, shuffle=True)
             for x in batch: 
+                # print(len(x[0]))
+                if (len(x[0] < self.config.batch_size)):
+                    continue
                 loss = self.train_on_batch(sess, *x)
             logger.info("training finished")
             
