@@ -42,7 +42,7 @@ class Data(object):
         self.data = []
         self.padding_data = []
 
-        self.load_data(stopwords)
+        self.load_data(stopwords=stopwords)
         self.pad_data()
 
     def destory(self):
@@ -69,9 +69,6 @@ class Data(object):
             else:
                 words = list(self.segmentor.segment(query))
             if stopwords is not None:
-                for word in words:
-                    if word in stopwords:
-                        print(word)
                 words = [word for word in words if word not in stopwords] 
             self.data.append((words, self.LABELS.index(label)))
         
@@ -79,7 +76,7 @@ class Data(object):
             self.max_length = max([len(x[0]) for x in self.data])
     
     def pad_data(self):
-        max_length = max([len(x[0]) for x in self.data])
+        max_length = self.max_length
         padding = [0] 
         for sentence, label in self.data:
             new_sentence = sentence[:max_length] if len(sentence) >= max_length else sentence + padding * (max_length - len(sentence))
@@ -160,7 +157,7 @@ def load_word_embedding(input_file='./data/sgns.target.word-word.dynwin5.thr10.n
                 pickle.dump(token2id, f)
         return embedding, token2id
 
-def load_stopwords(input_file='./data/stopwords.txt'):
+def load_stopwords(input_file='data/stopwords.txt'):
     """some doces"""
     with open(input_file, encoding='utf-8', errors='ignore') as f:
         stopwords = set()

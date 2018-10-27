@@ -26,10 +26,10 @@ class Config(object):
     n_classes = -1
     max_length = -1
     
-    dropout = 0.5
+    dropout = 1
     hidden_size = 300
     batch_size = 32
-    n_epochs = 50
+    n_epochs = 100
     lr = 0.001
 
     model_output = "./result/lstm/model.weights"
@@ -95,7 +95,9 @@ class Classifier(object):
             shape=[self.config.n_classes],
             initializer=tf.constant_initializer(0.))
         
-        preds = tf.matmul(state.h, U) + b2
+        h_dropout = tf.nn.dropout(state.h, dropout_rate)
+        
+        preds = tf.matmul(h_dropout, U) + b2
         return preds
         
     def add_loss_op(self, preds):
@@ -119,7 +121,7 @@ class Classifier(object):
 
     def predict_on_batch(self, sess, inputs_batch):
         feed = self.create_feed_dict(
-            inputs_batch, dropout=self.config.dropout)
+            inputs_batch)
         predictions = np.argmax(sess.run(self.pred, feed_dict=feed), axis=1)
         return predictions
 
@@ -203,8 +205,10 @@ class Classifier(object):
 def do_train(args):
 
     pretrained_embeddings, token2id = util.load_word_embedding(input_file=args.vectors, cache='cache')
-    train_data = util.Data(args.data_train, args.ltp_data)
-    dev_data = util.Data(args.data_dev, args.ltp_data, max_length=train_data.max_length)
+    stopwords = util.load_stopwords()
+    stopwords = None
+    train_data = util.Data(args.data_train, args.ltp_data, stopwords=stopwords)
+    dev_data = util.Data(args.data_dev, args.ltp_data, max_length=train_data.max_length, stopwords=stopwords)
     config = Config()
     # 配置参数. 测试集如何设置?
     _, config.max_length = train_data.get_metadata()
