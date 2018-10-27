@@ -31,6 +31,8 @@ class Config(object):
     batch_size = 32
     n_epochs = 50
     lr = 0.001
+
+    model_output = "./result/lstm/model.weights"
     pass
 
 def preprocess_data(data, token2id):
@@ -94,7 +96,6 @@ class Classifier(object):
             initializer=tf.constant_initializer(0.))
         
         preds = tf.matmul(state.h, U) + b2
-        # preds = tf.matmul(x , U)
         return preds
         
     def add_loss_op(self, preds):
@@ -150,26 +151,34 @@ class Classifier(object):
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
             batch = util.minibatches(train_data, self.config.batch_size, shuffle=True)
+            loss_list = []
             for x in batch: 
                 # print(len(x[0]))
-                if (len(x[0] < self.config.batch_size)):
+                if len(x[0]) < self.config.batch_size:
+                    logger.info('insufficient batch with length of %d' % (len(x[0])))
                     continue
-                loss = self.train_on_batch(sess, *x)
+                loss_list.append(self.train_on_batch(sess, *x))
+                
+            logger.info("average loss: %f" % (np.average(loss_list)))
             logger.info("training finished")
             
             logger.info("Evaluating on development data")
             
-            print(self.evaluate(sess, dev_data))
+            
+            score = self.evaluate(sess, dev_data)
+            logger.info("P: %f" % (score))
             # batch = util.minibatches(dev_data, self.config.batch_size, shuffle=False)
             # for x in batch: 
             #     loss = self.predict_on_batch(sess, *x)
             # token_cm, entity_scores = self.evaluate(sess, dev_set, dev_set_raw)
             # score = entity_scores[-1]
             
-            # if score > best_score:
-            #     best_score = score
-            #     logger.info("New best score! Saving model in %s", self.config.model_output)
-            #     saver.save(sess, self.config.model_output)
+            if score > best_score:
+                best_score = score
+                logger.info("New best score! Saving model in %s", self.config.model_output)
+                saver.save(sess, self.config.model_output)
+
+        return best_score
 
     def build(self):
         """Some docs"""
@@ -216,7 +225,7 @@ def do_train(args):
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as session:
             
             session.run(init)
-            model.fit(session, saver, train_data, dev_data)
+            score = model.fit(session, saver, train_data, dev_data) 
 
 
 if __name__ == '__main__':
