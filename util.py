@@ -30,7 +30,7 @@ class Data(object):
           'flight', 'translation', 'train', 'schedule', 'radio', 'email']
 
 
-    def __init__(self, data_file=None, ltp_data_path=None, max_length=None):
+    def __init__(self, data_file=None, ltp_data_path=None, max_length=None, stopwords=None):
         assert ltp_data_path is not None
         assert data_file is not None
  
@@ -42,7 +42,7 @@ class Data(object):
         self.data = []
         self.padding_data = []
 
-        self.load_data()
+        self.load_data(stopwords)
         self.pad_data()
 
     def destory(self):
@@ -52,7 +52,7 @@ class Data(object):
         """数据集的大小信息"""
         return len(self.data), self.max_length
     
-    def load_data(self):
+    def load_data(self, stopwords=None):
         """load and parse the data"""
         with open(self.data_file, 'r', encoding='utf-8') as f:
             json_data = json.load(f)
@@ -63,10 +63,16 @@ class Data(object):
         for key in json_data.keys():
             label = json_data.get(key).get('label')
             query = json_data.get(key).get('query')
+            # TODO 截断 
             if self.max_length is not None:
                 words = list(self.segmentor.segment(query))[:self.max_length]
             else:
                 words = list(self.segmentor.segment(query))
+            if stopwords is not None:
+                for word in words:
+                    if word in stopwords:
+                        print(word)
+                words = [word for word in words if word not in stopwords] 
             self.data.append((words, self.LABELS.index(label)))
         
         if self.max_length is None:
@@ -154,6 +160,14 @@ def load_word_embedding(input_file='./data/sgns.target.word-word.dynwin5.thr10.n
                 pickle.dump(token2id, f)
         return embedding, token2id
 
+def load_stopwords(input_file='./data/stopwords.txt'):
+    """some doces"""
+    with open(input_file, encoding='utf-8', errors='ignore') as f:
+        stopwords = set()
+        for line in f:
+            stopwords.add(line.strip())
+    return stopwords
+
 def embedding_simplify(embedding, token2id, data):
     """保留需用到的词向量, 全部太大了"""
     new_embedding = []
@@ -178,10 +192,12 @@ def test1():
         
 
 if __name__ == '__main__':
-    train_data = Data('./data/train.json', 'L:\\workspace\\ltp_data\\')
-    
+    stopwords = load_stopwords()
+    train_data = Data('./data/train.json', 'L:\\workspace\\ltp_data\\', stopwords=stopwords)
+        
     data = train_data.data
-    embedding, token2id = load_word_embedding(cache='cache')
-    embedding_simplify(embedding, token2id, data)
+    pass
+    # embedding, token2id = load_word_embedding(cache='cache')
+    # embedding_simplify(embedding, token2id, data)
     
 

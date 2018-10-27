@@ -176,7 +176,7 @@ class Classifier(object):
             if score > best_score:
                 best_score = score
                 logger.info("New best score! Saving model in %s", self.config.model_output)
-                saver.save(sess, self.config.model_output)
+                #saver.save(sess, self.config.model_output)
 
         return best_score
 
@@ -226,6 +226,8 @@ def do_train(args):
             
             session.run(init)
             score = model.fit(session, saver, train_data, dev_data) 
+            print("\n")
+            logger.info("training finished, took %.2f seconds with P: %.2f", time.time() - start, score)
 
 
 if __name__ == '__main__':
