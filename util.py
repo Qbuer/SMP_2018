@@ -41,7 +41,7 @@ class Data(object):
         
         self.data = []
         self.padding_data = []
-
+        self.__data__ = {}
         self.load_data(stopwords=stopwords)
         self.pad_data()
 
@@ -63,6 +63,12 @@ class Data(object):
         for key in json_data.keys():
             label = json_data.get(key).get('label')
             query = json_data.get(key).get('query')
+
+            self.__data__[key] = {
+                "query": query,
+                "label": label
+            }
+
             # TODO 截断 
             if self.max_length is not None:
                 words = list(self.segmentor.segment(query))[:self.max_length]
@@ -75,6 +81,18 @@ class Data(object):
         if self.max_length is None:
             self.max_length = max([len(x[0]) for x in self.data])
     
+    def update_labels(self, labels):
+        for index, key in enumerate (self.__data__):
+            self.__data__.get(key)['label'] = self.LABELS[int(labels[index])]
+        return self
+
+    def save_result(self, outputfile="out.json"):
+        with open(outputfile, 'w', encoding='utf-8') as f:
+            json.dump(self.__data__, f, ensure_ascii=False)
+
+        
+        
+
     def pad_data(self):
         max_length = self.max_length
         padding = [0] 

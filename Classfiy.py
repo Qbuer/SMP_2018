@@ -126,11 +126,10 @@ class Classifier(object):
         predictions = np.argmax(sess.run(self.pred, feed_dict=feed), axis=1)
         return predictions
 
-    def evaluate(self, sess, dev_data):
+    def evaluate(self, sess, data, data_obj):
         correct_preds, total_correct, total_preds = 0., 0., 0.
-        batch = util.minibatches(dev_data, self.config.batch_size, shuffle=False)
 
-        labels , preds = self.output(sess, None, dev_data)
+        labels , preds = self.output(sess, data_obj, data)
 
         for pred, label in zip(preds, labels):
             if pred == label:
@@ -140,10 +139,25 @@ class Classifier(object):
         
         return correct_preds / total_preds
 
-    def fit(self, sess, saver, train_data_raw, dev_data_raw):
+    def output(self, sess, inputs_obj, inputs=None):
+        if inputs is None:
+            inputs = preprocess_data(inputs_obj.padding_data, self.token2id)
+
+        batch = util.minibatches(inputs, self.config.batch_size, shuffle=False)
+        predictions = []
+        labels = []
+        for x in batch:
+            if len(x[0]) < self.config.batch_size:
+                continue
+            predictions += list(self.predict_on_batch(sess, x[0]))
+            labels += list(x[1])
+        
+        return labels, predictions
+
+    def fit(self, sess, saver, train_data_obj, dev_data_obj):
         best_score = 0.
-        train_data = preprocess_data(train_data_raw.padding_data, self.token2id)
-        dev_data = preprocess_data(dev_data_raw.padding_data, self.token2id)
+        train_data = preprocess_data(train_data_obj.padding_data, self.token2id)
+        dev_data = preprocess_data(dev_data_obj.padding_data, self.token2id)
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
             batch = util.minibatches(train_data, self.config.batch_size, shuffle=True)
@@ -161,7 +175,7 @@ class Classifier(object):
             logger.info("Evaluating on development data")
             
             
-            score = self.evaluate(sess, dev_data)
+            score = self.evaluate(sess, dev_data, train_data_obj)
             logger.info("P: %f" % (score))
             
             
@@ -172,20 +186,7 @@ class Classifier(object):
 
         return best_score
 
-    def output(self, sess, inputs_raw, inputs=None):
-        if inputs is None:
-            inputs = preprocess_data(inputs_raw.padding_data, self.token2id)
-
-        batch = util.minibatches(inputs, self.config.batch_size, shuffle=False)
-        predictions = []
-        labels = []
-        for x in batch:
-            if len(x[0]) < self.config.batch_size:
-                continue
-            predictions += list(self.predict_on_batch(sess, x[0]))
-            labels += list(x[1])
-        
-        return labels, predictions
+    
             
 
     def build(self):
@@ -250,6 +251,7 @@ def do_predict(args):
     config.n_classes = len(train_data.LABELS)
     config.n_word_embed_size = len(pretrained_embeddings[0])
     config.batch_size = len(test_data.data)
+    
 
     with tf.Graph().as_default():
         logger.info("Building model...",)
@@ -263,7 +265,11 @@ def do_predict(args):
             
             session.run(init)
             saver.restore(session, model.config.model_output)
-            print(model.evaluate(session, test_data))
+            labels, prediction = model.output(session, test_data, None)
+            print(labels)
+            print(prediction)
+            test_data.update_labels(labels).save_result()
+            # print(model.evaluate(session, None, test_data))
 
 
 if __name__ == '__main__':
