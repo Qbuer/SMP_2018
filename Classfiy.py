@@ -29,7 +29,7 @@ class Config(object):
     dropout = 1
     hidden_size = 300
     batch_size = 32
-    n_epochs = 100
+    n_epochs = 50
     lr = 0.001
 
     model_output = "./result/lstm/model.weights"
@@ -83,6 +83,7 @@ class Classifier(object):
         x = self.add_embedding()
         dropout_rate = self.dropout_placehoder
 
+
         lstm_cell = tf.nn.rnn_cell.LSTMCell(self.config.hidden_size)
         initial_state = lstm_cell.zero_state(self.config.batch_size, dtype=tf.float32)
         outputs, state = tf.nn.dynamic_rnn(lstm_cell, x, initial_state=initial_state)
@@ -128,16 +129,9 @@ class Classifier(object):
     def evaluate(self, sess, dev_data):
         correct_preds, total_correct, total_preds = 0., 0., 0.
         batch = util.minibatches(dev_data, self.config.batch_size, shuffle=False)
-        preds = []
-        labels = []
-        for x in batch:
-            if len(x[0]) < self.config.batch_size:
-                continue
-            tmp = self.predict_on_batch(sess, x[0])
-            preds += list(tmp)
-            labels += list(x[1])
-            
-        
+
+        labels , preds = self.output(sess, None, dev_data)
+
         for pred, label in zip(preds, labels):
             if pred == label:
                 correct_preds += 1
@@ -169,18 +163,30 @@ class Classifier(object):
             
             score = self.evaluate(sess, dev_data)
             logger.info("P: %f" % (score))
-            # batch = util.minibatches(dev_data, self.config.batch_size, shuffle=False)
-            # for x in batch: 
-            #     loss = self.predict_on_batch(sess, *x)
-            # token_cm, entity_scores = self.evaluate(sess, dev_set, dev_set_raw)
-            # score = entity_scores[-1]
+            
             
             if score > best_score:
                 best_score = score
                 logger.info("New best score! Saving model in %s", self.config.model_output)
-                #saver.save(sess, self.config.model_output)
+                saver.save(sess, self.config.model_output)
 
         return best_score
+
+    def output(self, sess, inputs_raw, inputs=None):
+        if inputs is None:
+            inputs = preprocess_data(inputs_raw.padding_data, self.token2id)
+
+        batch = util.minibatches(inputs, self.config.batch_size, shuffle=False)
+        predictions = []
+        labels = []
+        for x in batch:
+            if len(x[0]) < self.config.batch_size:
+                continue
+            predictions += list(self.predict_on_batch(sess, x[0]))
+            labels += list(x[1])
+        
+        return labels, predictions
+            
 
     def build(self):
         """Some docs"""
@@ -215,8 +221,6 @@ def do_train(args):
     config.n_classes = len(train_data.LABELS)
     config.n_word_embed_size = len(pretrained_embeddings[0])
 
-    
-
 
     with tf.Graph().as_default():
         logger.info("Building model...",)
@@ -233,18 +237,57 @@ def do_train(args):
             print("\n")
             logger.info("training finished, took %.2f seconds with P: %.2f", time.time() - start, score)
 
+def do_predict(args):
+
+    pretrained_embeddings, token2id = util.load_word_embedding(input_file=args.vectors, cache='cache')
+    stopwords = util.load_stopwords()
+    stopwords = None
+    train_data = util.Data(args.data_train, args.ltp_data, stopwords=stopwords)
+    test_data = util.Data(args.data_test, args.ltp_data, max_length=train_data.max_length, stopwords=stopwords)
+    config = Config()
+    # 配置参数. 测试集如何设置?
+    _, config.max_length = train_data.get_metadata()
+    config.n_classes = len(train_data.LABELS)
+    config.n_word_embed_size = len(pretrained_embeddings[0])
+    config.batch_size = len(test_data.data)
+
+    with tf.Graph().as_default():
+        logger.info("Building model...",)
+        start = time.time()
+        model = Classifier(pretrained_embeddings, token2id, config)
+        logger.info("took %.2f seconds", time.time() - start)
+        init = tf.global_variables_initializer()
+        saver = tf.train.Saver()
+        gpu_options = tf.GPUOptions(allow_growth=True)
+        with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as session:
+            
+            session.run(init)
+            saver.restore(session, model.config.model_output)
+            print(model.evaluate(session, test_data))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SMP2018 -- Text Classification')
     subparsers = parser.add_subparsers()
+
     command_parser = subparsers.add_parser('train', help='')
     command_parser.add_argument('-dt', '--data-train', default="data/train.json", help="Training data")
     command_parser.add_argument('-dd', '--data-dev',  default="data/dev.json", help="Dev data")
     command_parser.add_argument('-vv', '--vectors',  default="embeding_terse", help="Path to word vectors file")
     command_parser.add_argument('-ltp', '--ltp-data', default="L:/workspace/ltp_data/", help="Path to ltp_data")
     command_parser.set_defaults(func=do_train)
+
+    command_parser = subparsers.add_parser('predict', help='')
+    command_parser.add_argument('-dt', '--data-train', default="data/train.json", help="Training data")
+    command_parser.add_argument('-dd', '--data-test', default="data/test.json", help="Training data")
+    command_parser.add_argument('-vv', '--vectors',  default="embeding_terse", help="Path to word vectors file")
+    command_parser.add_argument('-ltp', '--ltp-data', default="L:/workspace/ltp_data/", help="Path to ltp_data")
+    command_parser.add_argument('-out', '--out-put', default="out.json", help="predict file")
+    command_parser.set_defaults(func=do_predict)
     ARGS = parser.parse_args()
     
+    
+
     if ARGS.func is None:
         parser.print_help()
         sys.exit(1)
