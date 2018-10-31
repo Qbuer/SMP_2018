@@ -42,6 +42,8 @@ class Data(object):
         self.data = []
         self.padding_data = []
         self.__data__ = {}
+        self.keys = []
+        
         self.load_data(stopwords=stopwords)
         self.pad_data()
 
@@ -64,11 +66,14 @@ class Data(object):
             label = json_data.get(key).get('label')
             query = json_data.get(key).get('query')
 
+            if label is None:
+                label = 'website'
+                
             self.__data__[key] = {
                 "query": query,
                 "label": label
             }
-
+            self.keys.append(key)
             # TODO 截断 
             if self.max_length is not None:
                 words = list(self.segmentor.segment(query))[:self.max_length]
@@ -82,7 +87,7 @@ class Data(object):
             self.max_length = max([len(x[0]) for x in self.data])
     
     def update_labels(self, labels):
-        for index, key in enumerate (self.__data__):
+        for index, key in enumerate(self.keys):
             self.__data__.get(key)['label'] = self.LABELS[int(labels[index])]
         return self
 
@@ -197,6 +202,17 @@ def embedding_simplify(embedding, token2id, data):
             f.write("%s %s\n" % (item[0], " ".join([str(x) for x in item[1]])))
 
 
+def env_testing(_):
+    """测试程序执行的环境"""
+
+    path = "./" #文件夹目录
+    files= os.listdir(path) #得到文件夹下的所有文件名称
+    s = []
+    for _file in files: #遍历文件夹
+        print(_file)
+
+
+
 def test1():
     train_data = Data('./data/train.json', 'L:\\workspace\\ltp_data\\')
     
@@ -207,11 +223,19 @@ def test1():
         
 
 if __name__ == '__main__':
+
+    pass
     stopwords = load_stopwords()
     train_data = Data('./data/train.json', 'L:\\workspace\\ltp_data\\', stopwords=stopwords)
-        
-    data = train_data.data
+    prediction = []
+    for i in range(len(train_data.data)):
+        prediction.append(0)
+    
+    train_data.update_labels(prediction)
     pass
+        
+    # data = train_data.data
+    # pass
     # embedding, token2id = load_word_embedding(cache='cache')
     # embedding_simplify(embedding, token2id, data)
     

@@ -32,7 +32,7 @@ class Config(object):
     n_epochs = 50
     lr = 0.001
 
-    model_output = "./result/lstm/model.weights"
+    model_output = "./model"
     pass
 
 def preprocess_data(data, token2id):
@@ -268,7 +268,7 @@ def do_predict(args):
             labels, prediction = model.output(session, test_data, None)
             print(labels)
             print(prediction)
-            test_data.update_labels(labels).save_result()
+            test_data.update_labels(prediction).save_result()
             # print(model.evaluate(session, None, test_data))
 
 
@@ -287,9 +287,14 @@ if __name__ == '__main__':
     command_parser.add_argument('-dt', '--data-train', default="data/train.json", help="Training data")
     command_parser.add_argument('-dd', '--data-test', default="data/test.json", help="Training data")
     command_parser.add_argument('-vv', '--vectors',  default="embeding_terse", help="Path to word vectors file")
-    command_parser.add_argument('-ltp', '--ltp-data', default="L:/workspace/ltp_data/", help="Path to ltp_data")
+    command_parser.add_argument('-ltp', '--ltp-data', default=".", help="Path to ltp_data")
     command_parser.add_argument('-out', '--out-put', default="out.json", help="predict file")
     command_parser.set_defaults(func=do_predict)
+
+    command_parser = subparsers.add_parser('env_test', help='')
+    command_parser.set_defaults(func=util.env_testing)
+
+
     ARGS = parser.parse_args()
     
     
