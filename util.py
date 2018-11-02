@@ -37,6 +37,7 @@ class Data(object):
         self.max_length = max_length
         self.data_file = data_file
         self.segmentor = Segmentor()
+        
         self.segmentor.load(os.path.join(ltp_data_path, 'cws.model'))
         
         self.data = []

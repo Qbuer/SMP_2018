@@ -13,6 +13,7 @@ import argparse
 import numpy as np
 import json
 import pickle
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -26,14 +27,27 @@ class Config(object):
     n_classes = -1
     max_length = -1
     
-    dropout = 1
+    dropout = 0.5
     hidden_size = 300
     batch_size = 32
-    n_epochs = 50
+    n_epochs = 200
+    n_layer = 3
     lr = 0.001
 
-    model_output = "./model"
+    
     pass
+
+    def __init__(self, args):
+        print (args)
+        if "model_path" in args:
+            self.model_path = args.model_path
+        else:
+            self.model_path = "results/{:%Y%m%d_%H%M%S}/".format(datetime.now())
+        
+        print(self.model_path)
+        self.output_model = self.model_path + args.model_name
+        
+
 
 def preprocess_data(data, token2id):
     ret = []
@@ -84,9 +98,13 @@ class Classifier(object):
         dropout_rate = self.dropout_placehoder
 
 
-        lstm_cell = tf.nn.rnn_cell.LSTMCell(self.config.hidden_size)
-        initial_state = lstm_cell.zero_state(self.config.batch_size, dtype=tf.float32)
-        outputs, state = tf.nn.dynamic_rnn(lstm_cell, x, initial_state=initial_state)
+        lstm_layers = [tf.nn.rnn_cell.LSTMCell(self.config.hidden_size) for _ in range(self.config.n_layer)]
+        mutil_rnn_cell = tf.nn.rnn_cell.MultiRNNCell(lstm_layers)
+        initial_state = mutil_rnn_cell.zero_state(self.config.batch_size, dtype=tf.float32)
+        outputs, state = tf.nn.dynamic_rnn(mutil_rnn_cell, x, initial_state=initial_state)
+        
+         # attention
+        
         U = tf.get_variable(
             "U",
             shape=[self.config.hidden_size, self.config.n_classes],
@@ -96,7 +114,7 @@ class Classifier(object):
             shape=[self.config.n_classes],
             initializer=tf.constant_initializer(0.))
         
-        h_dropout = tf.nn.dropout(state.h, dropout_rate)
+        h_dropout = tf.nn.dropout(state[self.config.n_layer - 1].h, dropout_rate)
         
         preds = tf.matmul(h_dropout, U) + b2
         return preds
@@ -181,8 +199,8 @@ class Classifier(object):
             
             if score > best_score:
                 best_score = score
-                logger.info("New best score! Saving model in %s", self.config.model_output)
-                saver.save(sess, self.config.model_output)
+                logger.info("New best score! Saving model in %s", self.config.output_model)
+                # saver.save(sess, self.config.output_model)
 
         return best_score
 
@@ -216,7 +234,7 @@ def do_train(args):
     stopwords = None
     train_data = util.Data(args.data_train, args.ltp_data, stopwords=stopwords)
     dev_data = util.Data(args.data_dev, args.ltp_data, max_length=train_data.max_length, stopwords=stopwords)
-    config = Config()
+    config = Config(args)
     # 配置参数. 测试集如何设置?
     _, config.max_length = train_data.get_metadata()
     config.n_classes = len(train_data.LABELS)
@@ -245,7 +263,7 @@ def do_predict(args):
     stopwords = None
     train_data = util.Data(args.data_train, args.ltp_data, stopwords=stopwords)
     test_data = util.Data(args.data_test, args.ltp_data, max_length=train_data.max_length, stopwords=stopwords)
-    config = Config()
+    config = Config(args)
     # 配置参数. 测试集如何设置?
     _, config.max_length = train_data.get_metadata()
     config.n_classes = len(train_data.LABELS)
@@ -264,7 +282,7 @@ def do_predict(args):
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as session:
             
             session.run(init)
-            saver.restore(session, model.config.model_output)
+            saver.restore(session, model.config.model_model)
             labels, prediction = model.output(session, test_data, None)
             print(labels)
             print(prediction)
@@ -274,21 +292,23 @@ def do_predict(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SMP2018 -- Text Classification')
-    subparsers = parser.add_subparsers()
+    
+    parser.add_argument('-mp', '--model-path', default="result/", help="Path to model")
+    parser.add_argument('-mn', '--model-name', help="Name of model", required=True)
+    parser.add_argument('-vv', '--vectors',  default="/users4/zhqiao/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5", help="Path to word vectors file")
+    parser.add_argument('-ltp', '--ltp-data', default="/users4/zhqiao/workspace/ltp/", help="Path to ltp_data")
 
+    subparsers = parser.add_subparsers()
     command_parser = subparsers.add_parser('train', help='')
     command_parser.add_argument('-dt', '--data-train', default="data/train.json", help="Training data")
     command_parser.add_argument('-dd', '--data-dev',  default="data/dev.json", help="Dev data")
-    command_parser.add_argument('-vv', '--vectors',  default="embeding_terse", help="Path to word vectors file")
-    command_parser.add_argument('-ltp', '--ltp-data', default="L:/workspace/ltp_data/", help="Path to ltp_data")
     command_parser.set_defaults(func=do_train)
 
     command_parser = subparsers.add_parser('predict', help='')
     command_parser.add_argument('-dt', '--data-train', default="data/train.json", help="Training data")
     command_parser.add_argument('-dd', '--data-test', default="data/test.json", help="Training data")
-    command_parser.add_argument('-vv', '--vectors',  default="embeding_terse", help="Path to word vectors file")
-    command_parser.add_argument('-ltp', '--ltp-data', default=".", help="Path to ltp_data")
     command_parser.add_argument('-out', '--out-put', default="out.json", help="predict file")
+    
     command_parser.set_defaults(func=do_predict)
 
     command_parser = subparsers.add_parser('env_test', help='')
