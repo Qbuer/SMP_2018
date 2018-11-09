@@ -5,6 +5,7 @@
 
 import tensorflow as tf
 from tensorflow.contrib import rnn
+from tensorflow.contrib.seq2seq import BahdanauAttention
 import logging
 import util
 import time
@@ -14,6 +15,10 @@ import numpy as np
 import json
 import pickle
 from datetime import datetime
+import os 
+
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -95,14 +100,78 @@ class Classifier(object):
     
     def add_prediction_op(self):
         x = self.add_embedding()
+        #x.shape: [batch_size, max_length, vector_dim]
         dropout_rate = self.dropout_placehoder
 
+        self.config.cell = 'lstm'
 
-        lstm_layers = [tf.nn.rnn_cell.LSTMCell(self.config.hidden_size) for _ in range(self.config.n_layer)]
-        mutil_rnn_cell = tf.nn.rnn_cell.MultiRNNCell(lstm_layers)
-        initial_state = mutil_rnn_cell.zero_state(self.config.batch_size, dtype=tf.float32)
-        outputs, state = tf.nn.dynamic_rnn(mutil_rnn_cell, x, initial_state=initial_state)
+        if self.config.cell == 'lstm':
+            lstm_cell = tf.nn.rnn_cell.LSTMCell(self.config.hidden_size)
+            initial_state = lstm_cell.zero_state(self.config.batch_size, dtype=tf.float32)
+            outputs, state = tf.nn.dynamic_rnn(lstm_cell, x, initial_state=initial_state)
+            # outputs: [batch_size, max_length, cell_state_size]
+
+            # outputs: [batch_size * max_length, self.config.hidden_size]
+            # outputs = tf.reshape(outputs, (self.config.batch_size * self.config.max_length, self.config.hidden_size))
+
+
+
+            # word attention
+            C = tf.get_variable(  # UW as context embedding
+            "C",
+            shape=[self.config.hidden_size, 1],
+            initializer=tf.contrib.layers.xavier_initializer())
+
+            W = tf.get_variable(
+            "W",
+            shape=[self.config.hidden_size, self.config.hidden_size],
+            initializer=tf.contrib.layers.xavier_initializer())
+            
+            b = tf.get_variable(
+            "b",
+            shape=[self.config.hidden_size],
+            initializer=tf.constant_initializer(0.)
+            )
+
+            sentence_representation = []
+
+            for index in range(self.config.batch_size):
+                logger.info(outputs.shape)
+                U_i = tf.tanh(tf.matmul(outputs[index], W)) + b
+
+                alpha_i = tf.exp(tf.matmul(tf.transpose(U_i), C)) / tf.math.reduce_sum(tf.math.exp(tf.matmul(tf.transpose(U_i), C)))
+
+                S_i = tf.math.reduce_sum(alpha_i * outputs[index])
+
+                sentence_representation.append(S_i)
+
+
+
+
+            
+
+
+            
+
+        # def attention():
+            
+            
+
+
+        # lstm_layers = [tf.nn.rnn_cell.LSTMCell(self.config.hidden_size) for _ in range(self.config.n_layer)]
+        # mutil_rnn_cell = tf.nn.rnn_cell.MultiRNNCell(lstm_layers)
+
+        # forward_cell = tf.nn.rnn_cell.LSTMCell(self.config.hidden_size)
+        # backward_cell = tf.nn.rnn_cell.LSTMCell(self.config.hidden_size)
         
+        # fw_initial_state = 
+
+        # outputs, output_states = tf.nn.bidirectional_dynamic_rnn(forward_cell, backward_cell, x, dtype=tf.float32)
+        # initial_state = mutil_rnn_cell.zero_state(self.config.batch_size, dtype=tf.float32)
+        # outputs, state = tf.nn.dynamic_rnn(mutil_rnn_cell, x, initial_state=initial_state)
+        
+
+
          # attention
         
         U = tf.get_variable(
@@ -114,9 +183,15 @@ class Classifier(object):
             shape=[self.config.n_classes],
             initializer=tf.constant_initializer(0.))
         
-        h_dropout = tf.nn.dropout(state[self.config.n_layer - 1].h, dropout_rate)
         
-        preds = tf.matmul(h_dropout, U) + b2
+        # fw_bw_concat = tf.concat(outputs, 2)
+        # logger.info("output.shape: %s", str(outputs[0].shape))
+        # logger.info("fw_bw_concat.shape: %s", str(fw_bw_concat.shape))
+        # h_dropout = tf.nn.dropout(fw_bw_concat[:,-1,:], dropout_rate)
+        
+
+
+        preds = tf.matmul(tf.convert_to_tensor(sentence_representation), U) + b2
         return preds
         
     def add_loss_op(self, preds):
@@ -200,7 +275,8 @@ class Classifier(object):
             if score > best_score:
                 best_score = score
                 logger.info("New best score! Saving model in %s", self.config.output_model)
-                # saver.save(sess, self.config.output_model)
+                if best_score > 0.85:
+                    saver.save(sess, self.config.output_model)
 
         return best_score
 
@@ -235,6 +311,7 @@ def do_train(args):
     train_data = util.Data(args.data_train, args.ltp_data, stopwords=stopwords)
     dev_data = util.Data(args.data_dev, args.ltp_data, max_length=train_data.max_length, stopwords=stopwords)
     config = Config(args)
+    print(train_data.max_length)
     # 配置参数. 测试集如何设置?
     _, config.max_length = train_data.get_metadata()
     config.n_classes = len(train_data.LABELS)
