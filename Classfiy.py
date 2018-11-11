@@ -39,6 +39,8 @@ class Config(object):
     n_layer = 3
     lr = 0.001
 
+    n_context_vector = 320
+
     
     pass
 
@@ -112,38 +114,70 @@ class Classifier(object):
             # outputs: [batch_size, max_length, cell_state_size]
 
             # outputs: [batch_size * max_length, self.config.hidden_size]
-            # outputs = tf.reshape(outputs, (self.config.batch_size * self.config.max_length, self.config.hidden_size))
+            outputs = tf.reshape(outputs, (self.config.batch_size * self.config.max_length, self.config.hidden_size))
 
 
 
             # word attention
-            C = tf.get_variable(  # UW as context embedding
+            C = tf.get_variable(  # C as context embedding
             "C",
-            shape=[self.config.hidden_size, 1],
+            shape=[self.config.n_context_vector, 1],
             initializer=tf.contrib.layers.xavier_initializer())
 
             W = tf.get_variable(
             "W",
-            shape=[self.config.hidden_size, self.config.hidden_size],
+            shape=[self.config.hidden_size, self.config.n_context_vector],
             initializer=tf.contrib.layers.xavier_initializer())
             
             b = tf.get_variable(
             "b",
-            shape=[self.config.hidden_size],
+            shape=[self.config.n_context_vector],
             initializer=tf.constant_initializer(0.)
             )
-
+            
             sentence_representation = []
+            
+            #shape: batch_size * max_length, context_size
+            U1 = tf.tanh(tf.matmul(outputs, W)) + b
+            
+            exp = tf.matmul(U1, C)
 
+            
+
+
+            #shape (batch_size, max_length)
+            exp = tf.reshape(exp, (self.config.batch_size, self.config.max_length, 1))
+            print(exp.shape)
+
+            #shape (batch_size, 1)
+            tmp = tf.reduce_sum(exp, axis=1)
+            print(tmp.shape)
+            
+            # TODO 并行
+
+            outputs = tf.reshape(outputs, (self.config.batch_size, self.config.max_length, self.config.hidden_size))
             for index in range(self.config.batch_size):
-                logger.info(outputs.shape)
-                U_i = tf.tanh(tf.matmul(outputs[index], W)) + b
+                
+                outputs_ = outputs[index]
+                
+                sent = tf.reduce_sum(outputs_ * tmp[index], axis=0)
 
-                alpha_i = tf.exp(tf.matmul(tf.transpose(U_i), C)) / tf.math.reduce_sum(tf.math.exp(tf.matmul(tf.transpose(U_i), C)))
+                sentence_representation.append(sent)
+            
+            S =  tf.convert_to_tensor(sentence_representation)
+            print(S.shape)   
+                
+                    
+            
 
-                S_i = tf.math.reduce_sum(alpha_i * outputs[index])
+            
 
-                sentence_representation.append(S_i)
+
+            
+            
+
+
+            
 
 
 
@@ -191,7 +225,7 @@ class Classifier(object):
         
 
 
-        preds = tf.matmul(tf.convert_to_tensor(sentence_representation), U) + b2
+        preds = tf.matmul(S, U) + b2
         return preds
         
     def add_loss_op(self, preds):
