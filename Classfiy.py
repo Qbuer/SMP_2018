@@ -166,7 +166,8 @@ class Classifier(object):
             
             S =  tf.convert_to_tensor(sentence_representation)
             print(S.shape)   
-                
+            
+            pass
                     
             
 
