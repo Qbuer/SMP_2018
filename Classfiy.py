@@ -165,9 +165,7 @@ class Classifier(object):
                 sentence_representation.append(sent)
             
             S =  tf.convert_to_tensor(sentence_representation)
-            print(S.shape)   
-            
-            pass
+
                     
             
 
@@ -394,10 +392,11 @@ def do_predict(args):
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as session:
             
             session.run(init)
-            saver.restore(session, model.config.model_model)
+            saver.restore(session, model.config.output_model)
             labels, prediction = model.output(session, test_data, None)
             print(labels)
             print(prediction)
+            
             test_data.update_labels(prediction).save_result()
             # print(model.evaluate(session, None, test_data))
 

@@ -221,9 +221,36 @@ def test1():
     batch = minibatches(data, 12)
     for x in batch: 
         print(x)
+
+def diff(grand_file, predict_file, outputfile):
+    with open(grand_file, 'r', encoding='utf-8') as f:
+        json_data1 = json.load(f)
+    with open(predict_file, 'r', encoding='utf-8') as f:
+        json_data2 = json.load(f)
+    
+    result = {}
+
+    
+    for key in json_data1.keys():
+        label1 = json_data1.get(key).get('label')
+        label2 = json_data2.get(key).get('label')
+        if label1 != label2:
+            result[key] = {}
+            result[key]['query'] = json_data1.get(key).get('query')
+            result[key]['grand'] = label1
+            result[key]['predict'] = label2
+
+    with open(outputfile, 'w', encoding='utf-8') as f:
+        json.dump(result, f, ensure_ascii=False)
+
         
 
 if __name__ == '__main__':
+
+    grand_file = 'data/dev.json'
+    predict_file = 'out.json'
+    diff(grand_file, predict_file, 'diff.json')
+    exit()
 
     pass
     stopwords = load_stopwords()

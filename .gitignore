@@ -5,3 +5,5 @@ __pycache__/
 .vscode/
 *.swp
 result/
+reference material/
+output/
